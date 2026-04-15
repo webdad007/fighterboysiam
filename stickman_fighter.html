@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Stickman Fighter: Final Edition</title>
+    <style>
+        body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: white; font-family: 'Arial Black', Gadget, sans-serif; overflow: hidden; }
+        canvas { background: #fdfdfd; border: 5px solid #444; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .ui { position: absolute; top: 20px; display: flex; width: 780px; justify-content: space-between; font-family: sans-serif; }
+        .health-bar { width: 300px; height: 25px; background: #444; border: 2px solid #000; border-radius: 12px; overflow: hidden; }
+        .fill { height: 100%; width: 100%; transition: width 0.1s; }
+        #pHealth { background: #222; }
+        #eHealth { background: #d63031; }
+    </style>
+</head>
+<body>
+
+    <div class="ui">
+        <div>Player (Black)<div class="health-bar"><div id="pHealth" class="fill"></div></div></div>
+        <div>CPU (Red)<div class="health-bar"><div id="eHealth" class="fill"></div></div></div>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <div style="margin-top:15px; color:#555; font-weight: bold; text-transform: uppercase;">A/S to Attack | Arrows to Move</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const playerFace = new Image();
+playerFace.src = 'player.png'; 
+const enemyFace = new Image();
+enemyFace.src = 'enemy.png';
+
+const attackSounds = [
+    new Audio('1.mp3'), new Audio('2.mp3'), new Audio('3.mp3'), new Audio('4.mp3')
+];
+
+const config = { gravity: 0.8, groundY: 350, speed: 6, jump: -15 };
+
+class Fighter {
+    constructor(x, color, faceImg, isPlayer) {
+        this.x = x;
+        this.y = config.groundY;
+        this.color = color;
+        this.face = faceImg;
+        this.isPlayer = isPlayer;
+        this.hp = 100;
+        this.dx = 0;
+        this.dy = 0;
+        this.isJumping = false;
+        this.isAttacking = false;
+        this.attackType = '';
+        this.facing = isPlayer ? 1 : -1;
+        this.frame = 0;
+        this.deathRotation = 0;
+    }
+
+    draw(isWinner) {
+        this.frame++;
+        const hSize = 110; 
+        
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        if (this.hp <= 0) {
+            if (this.deathRotation < Math.PI / 2) this.deathRotation += 0.1;
+            ctx.rotate(this.deathRotation * this.facing * -1);
+            ctx.translate(0, 40);
+        }
+
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 6;
+        ctx.lineCap = 'round';
+
+        ctx.beginPath();
+        ctx.moveTo(0, -50); ctx.lineTo(0, -20); 
+        
+        if (isWinner) {
+            // Victory Flex
+            ctx.moveTo(0, -45); ctx.lineTo(-25, -60); ctx.lineTo(-20, -80);
+            ctx.moveTo(0, -45); ctx.lineTo(25, -60); ctx.lineTo(20, -80);
+        } else if (this.isAttacking) {
+            if(this.attackType === 'punch') {
+                ctx.moveTo(0, -40); ctx.lineTo(50 * this.facing, -40);
+            } else {
+                // Keep body neutral while kicking
+                ctx.moveTo(-15, -30); ctx.lineTo(0, -45); ctx.lineTo(15, -30);
+            }
+        } else {
+            ctx.moveTo(-15, -30); ctx.lineTo(0, -45); ctx.lineTo(15, -30);
+        }
+
+        if (isWinner) {
+            ctx.moveTo(0, -20); ctx.lineTo(-18, 0);
+            ctx.moveTo(0, -20); ctx.lineTo(18, 0);
+        } else if (this.isAttacking && this.attackType === 'kick') {
+            ctx.moveTo(0, -20); ctx.lineTo(55 * this.facing, -30);
+        } else {
+            const legSwing = Math.sin(this.frame * 0.2) * (this.dx !== 0 ? 15 : 0);
+            ctx.moveTo(-12 + legSwing, 0); ctx.lineTo(0, -20); ctx.lineTo(12 - legSwing, 0);
+        }
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(0, -100); 
+        if (this.facing === -1) ctx.scale(-1, 1);
+        ctx.drawImage(this.face, -hSize/2, -hSize/2, hSize, hSize);
+        ctx.restore();
+
+        ctx.restore();
+    }
+
+    update(isWinner) {
+        if (this.hp > 0 && !isWinner) {
+            this.x += this.dx;
+            this.y += this.dy;
+            if (this.y < config.groundY) this.dy += config.gravity;
+            else { this.y = config.groundY; this.dy = 0; this.isJumping = false; }
+            if (this.x < 50) this.x = 50;
+            if (this.x > canvas.width - 50) this.x = canvas.width - 50;
+        }
+        this.draw(isWinner);
+    }
+
+    attack(type) {
+        if (this.isAttacking || this.hp <= 0 || (this.isPlayer ? enemy.hp <= 0 : player.hp <= 0)) return;
+        this.isAttacking = true;
+        this.attackType = type;
+
+        if (this.isPlayer) {
+            const randomSound = attackSounds[Math.floor(Math.random() * attackSounds.length)];
+            randomSound.currentTime = 0; 
+            randomSound.play().catch(e => {});
+        }
+        
+        const target = this.isPlayer ? enemy : player;
+        const dist = Math.abs(this.x - target.x);
+        if (dist < 85 && Math.abs(this.y - target.y) < 80) {
+            target.hp -= (type === 'kick' ? 10 : 5);
+            document.getElementById(this.isPlayer ? 'eHealth' : 'pHealth').style.width = Math.max(0, target.hp) + '%';
+        }
+        setTimeout(() => { this.isAttacking = false; this.attackType = ''; }, 200);
+    }
+}
+
+const player = new Fighter(150, '#000', playerFace, true);
+const enemy = new Fighter(650, '#d63031', enemyFace, false);
+
+const keys = {};
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'KeyA') player.attack('punch');
+    if (e.code === 'KeyS') player.attack('kick');
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+function handleAI() {
+    if (enemy.hp <= 0 || player.hp <= 0) return;
+    const dist = enemy.x - player.x;
+    enemy.facing = dist > 0 ? -1 : 1;
+    if (Math.abs(dist) > 70) enemy.dx = dist > 0 ? -3 : 3;
+    else {
+        enemy.dx = 0;
+        if (Math.random() > 0.97) enemy.attack(Math.random() > 0.5 ? 'punch' : 'kick');
+    }
+}
+
+function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(0, 352); ctx.lineTo(800, 352); ctx.stroke();
+
+    const playerWins = enemy.hp <= 0;
+    const enemyWins = player.hp <= 0;
+
+    if (player.hp > 0 && !playerWins) {
+        player.dx = 0;
+        if (keys['ArrowLeft']) { player.dx = -config.speed; player.facing = -1; }
+        if (keys['ArrowRight']) { player.dx = config.speed; player.facing = 1; }
+        if (keys['ArrowUp'] && !player.isJumping) { player.dy = config.jump; player.isJumping = true; }
+    }
+
+    handleAI();
+    player.update(playerWins);
+    enemy.update(enemyWins);
+
+    if (!playerWins && !enemyWins) {
+        requestAnimationFrame(animate);
+    } else {
+        if (player.deathRotation < Math.PI/2 && enemy.deathRotation < Math.PI/2) {
+             requestAnimationFrame(animate);
+        } else {
+            setTimeout(() => {
+                ctx.fillStyle = "rgba(0,0,0,0.85)";
+                ctx.fillRect(0,0,800,400);
+                ctx.fillStyle = "white";
+                ctx.textAlign = "center";
+                
+                // WINNER LINE LOGIC
+                if (playerWins) {
+                    ctx.font = "bold 60px 'Arial Black'";
+                    ctx.fillText("Ni Hao Nigga", 400, 210);
+                } else {
+                    ctx.font = "bold 50px Arial";
+                    ctx.fillText("GAME OVER: RED WINS", 400, 210);
+                }
+            }, 600);
+        }
+    }
+}
+
+setTimeout(animate, 500);
+</script>
+</body>
+</html>
